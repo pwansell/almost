@@ -112,6 +112,19 @@ def placeholder_artwork(seed: int = 7) -> Image.Image:
     return img.filter(ImageFilter.GaussianBlur(3)).convert("RGB")
 
 
+def whiten_paper(img: Image.Image) -> Image.Image:
+    """Map the Artwork's paper tone (and any shading on it) to pure white.
+
+    Generated images often look like photographed paper: off-white, with
+    darker edges. The paper tone is the most common light value; anything
+    near or above it becomes white, and the rest stretches to fill the range.
+    """
+    hist = img.histogram()
+    paper = max(range(128, 256), key=lambda v: hist[v])
+    cut = max(150, paper - 28)
+    return img.point(lambda v: 255 if v >= cut else round(v * 255 / cut))
+
+
 def cover(img: Image.Image) -> Image.Image:
     s = max(W / img.width, H / img.height)
     img = img.resize((round(img.width * s), round(img.height * s)), Image.LANCZOS)
@@ -169,7 +182,7 @@ def countdown_block(n: int, safe_w: int) -> Image.Image:
 
 
 def place_block(block: Image.Image, art: Image.Image, region, pad: int = 40, step: int = 8):
-    """Find where the block overlaps the least ink, preferring the centre and full size.
+    """Find the height and size at which the centred block overlaps the least ink.
 
     Returns (x, y, block) with the block possibly scaled down.
     """
@@ -189,7 +202,8 @@ def place_block(block: Image.Image, art: Image.Image, region, pad: int = 40, ste
             continue
         gw, gh = bw // step, bh // step
         ys = np.arange(ry0 // step, (ry1 - bh) // step + 1)
-        xs = np.arange(rx0 // step, (rx1 - bw) // step + 1)
+        # Always horizontally centred; only the height and size adapt to the art.
+        xs = np.array([round((cx - bw / 2) / step)])
         Y, X = np.meshgrid(ys, xs, indexing="ij")
         box = integ[Y + gh, X + gw] - integ[Y, X + gw] - integ[Y + gh, X] + integ[Y, X]
         frac_ink = box / (gw * gh)
@@ -197,7 +211,7 @@ def place_block(block: Image.Image, art: Image.Image, region, pad: int = 40, ste
         cost = 1000 * frac_ink + 60 * dist + 40 * (1 - scale)
         i = np.unravel_index(cost.argmin(), cost.shape)
         if best is None or cost[i] < best[0]:
-            best = (cost[i], X[i] * step + pad, Y[i] * step + pad, scale)
+            best = (cost[i], round(cx - bw / 2) + pad, Y[i] * step + pad, scale)
     _, x, y, scale = best
     if scale != 1.0:
         block = block.resize((round(block.width * scale), round(block.height * scale)), Image.LANCZOS)
@@ -235,7 +249,7 @@ def offline_mark(d: ImageDraw.ImageDraw, x: int, y: int):
 def render_plate(art: Image.Image, event: Event, today: date, up_next: Event | None = None,
                  low_battery=False, offline=False) -> Image.Image:
     # Paper to pure white so the Banner and open centre don't speckle when dithered.
-    img = cover(art).convert("L").point(lambda v: 255 if v >= 225 else round(v * 255 / 225))
+    img = whiten_paper(cover(art).convert("L"))
     d = ImageDraw.Draw(img)
     safe_w = W - 2 * MX
 
