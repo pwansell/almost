@@ -1,0 +1,17 @@
+name = "almost"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "almost"
+
+[vars]
+GITHUB_REPO = "pwansell/almost"
+GITHUB_WORKFLOW = "studio.yml"
+
+# Secrets (set with `wrangler secret put NAME`):
+#   FRAME_TOKEN    secret path segment the Frame uses
+#   PREVIEW_TOKEN  secret path segment for the Preview page
+#   GITHUB_TOKEN   fine-grained token with Actions: read and write on the repo

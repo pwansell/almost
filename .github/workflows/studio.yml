@@ -1,0 +1,36 @@
+name: Studio
+
+# Renders the next 14 Plates into R2. Nightly before the Frame's 00:05 wake,
+# and on demand when the Preview page is opened.
+# The repo is public, so these logs are too: the Studio logs only counts.
+
+on:
+  schedule:
+    - cron: "0 11 * * *"  # 22:00 AEDT / 21:00 AEST
+  workflow_dispatch:
+
+concurrency:
+  group: studio
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Render Plates
+        working-directory: studio
+        env:
+          ICAL_URL: ${{ secrets.ICAL_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: almost
+          PYTHONWARNINGS: ignore
+        run: uv run --frozen python -m almost_studio render

@@ -5,7 +5,11 @@
 #   almost.sh wake    called just after every resume; if the alarm woke us,
 #                     show today's Plate and go back to sleep
 #   almost.sh mount   lay current.png over the stock sleep image (at boot)
-#   almost.sh show    pick today's Plate, restart the notes app, sleep
+#   almost.sh show    fetch new Plates, pick today's, restart the notes app, sleep
+#   almost.sh fetch   just fetch new Plates from the Studio
+#
+# The Studio's address lives in $HOME_DIR/frame.conf as
+#   STUDIO_URL=https://<worker>/frame/<FRAME_TOKEN>
 #
 # Test mode: put a number of seconds in $HOME_DIR/test-interval and the Frame
 # wakes that often, rotating through every Plate, instead of nightly at 00:05.
@@ -21,6 +25,9 @@ TZ_HOME=Australia/Melbourne
 WAKE_AT="00:05"
 CRITICAL_PERCENT=5
 LOG=$HOME_DIR/almost.log
+RETRY_AT="06:00"
+STUDIO_URL=""
+[ -f "$HOME_DIR/frame.conf" ] && . "$HOME_DIR/frame.conf"
 
 mkdir -p "$STATE"
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
@@ -35,8 +42,61 @@ next_wake_epoch() {
     fi
     # Tomorrow's Melbourne date, then 00:05 on that date in Melbourne time.
     # Going via the date string keeps this right across daylight-saving changes.
+    today=$(melbourne_date "$now")
+    # If tonight's fetch failed, try once more at 06:00 before giving up.
+    if [ -f "$STATE/fetch-failed" ]; then
+        retry=$(TZ=$TZ_HOME date -d "$today $RETRY_AT" +%s)
+        if [ "$now" -lt "$retry" ]; then
+            rm -f "$STATE/fetch-failed"
+            echo "$retry"
+            return
+        fi
+    fi
     tomorrow=$(melbourne_date $((now + 86400)))
     TZ=$TZ_HOME date -d "$tomorrow $WAKE_AT" +%s
+}
+
+download() {  # url dest
+    wget -q -T 20 -O "$2" "$1" 2>/dev/null || curl -fsS -m 20 -o "$2" "$1" 2>/dev/null
+}
+
+fetch() {
+    [ -n "$STUDIO_URL" ] || { log "no STUDIO_URL; skipping fetch"; return 0; }
+    mkdir -p "$PLATES"
+    battery=$(cat /sys/class/power_supply/max77818_battery/capacity)
+    list=$STATE/manifest.txt
+    # Wi-Fi takes a few seconds to come back after waking.
+    tries=0
+    until download "$STUDIO_URL/manifest.txt?battery=$battery" "$list.tmp"; do
+        tries=$((tries + 1))
+        if [ $tries -ge 9 ]; then
+            log "fetch failed: Studio unreachable"
+            touch "$STATE/fetch-failed"
+            return 1
+        fi
+        sleep 10
+    done
+    mv "$list.tmp" "$list"
+    got=0
+    while read -r sha file; do
+        case "$file" in *[!A-Za-z0-9.-]*|"") continue ;; esac
+        [ -f "$PLATES/$file" ] && [ "$(sha256sum "$PLATES/$file" | cut -d' ' -f1)" = "$sha" ] && continue
+        if download "$STUDIO_URL/$file" "$PLATES/$file.tmp" &&
+           [ "$(sha256sum "$PLATES/$file.tmp" | cut -d' ' -f1)" = "$sha" ]; then
+            mv "$PLATES/$file.tmp" "$PLATES/$file"
+            got=$((got + 1))
+        else
+            rm -f "$PLATES/$file.tmp"
+            log "fetch: bad download for $file"
+            touch "$STATE/fetch-failed"
+        fi
+    done < "$list"
+    # Drop Plates the Studio no longer lists (past days).
+    for p in "$PLATES"/*.png; do
+        [ -f "$p" ] || continue
+        grep -q "  $(basename "$p")\$" "$list" || rm -f "$p"
+    done
+    [ -f "$STATE/fetch-failed" ] || log "fetched $got new Plate(s)"
 }
 
 arm() {
@@ -90,6 +150,8 @@ press_power() {
 }
 
 show() {
+    rm -f "$STATE/fetch-failed"
+    fetch || true
     plate=$(choose_plate) || plate=""
     if [ -n "$plate" ]; then
         cp "$plate" "$CURRENT.tmp" && cat "$CURRENT.tmp" > "$CURRENT" && rm -f "$CURRENT.tmp"
@@ -121,5 +183,6 @@ case "${1:-}" in
     wake) wake ;;
     mount) ensure_mount ;;
     show) show ;;
-    *) echo "usage: $0 arm|wake|mount|show" >&2; exit 2 ;;
+    fetch) fetch ;;
+    *) echo "usage: $0 arm|wake|mount|show|fetch" >&2; exit 2 ;;
 esac

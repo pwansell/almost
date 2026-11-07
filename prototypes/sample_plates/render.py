@@ -23,8 +23,8 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 OUT = HERE / "out"
-FONT = HERE / "fonts" / "BodoniModa[opsz,wght].ttf"
-FONT_ITALIC = HERE / "fonts" / "BodoniModa-Italic[opsz,wght].ttf"
+FONT = REPO / "studio" / "assets" / "fonts" / "BodoniModa[opsz,wght].ttf"
+FONT_ITALIC = REPO / "studio" / "assets" / "fonts" / "BodoniModa-Italic[opsz,wght].ttf"
 
 W, H = 1404, 1872  # reMarkable 2, portrait
 MAT = 0.10  # Mat Margin, fraction of each dimension

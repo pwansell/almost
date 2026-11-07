@@ -1,0 +1,19 @@
+[project]
+name = "almost-studio"
+version = "0.1.0"
+description = "The Studio for Almost: reads the Event Calendar, makes Artwork, renders Plates."
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=11",
+    "numpy>=2",
+    "google-genai>=1.0",
+    "icalendar>=6",
+    "recurring-ical-events>=3",
+    "boto3>=1.35",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false

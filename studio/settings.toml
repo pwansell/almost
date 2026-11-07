@@ -1,0 +1,24 @@
+# Almost: Studio settings. Edit, commit and push; the next render uses them.
+
+home_time_zone = "Australia/Melbourne"
+days_ahead = 14            # Plates rendered per run
+offline_mark_from_day = 8  # Plates 8..14 carry the Offline Mark
+
+[frame]
+width = 1404
+height = 1872
+greys = 16
+
+# Mat Margin, in pixels, per edge. Measure once the mat is cut.
+[mat_margin]
+top = 187
+bottom = 187
+left = 140
+right = 140
+
+[battery]
+low_percent = 20   # Low Battery Mark at or below this (reported by the Frame)
+
+[artwork]
+model = "gemini-3.1-flash-lite-image"
+monthly_generation_cap = 20
