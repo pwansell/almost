@@ -71,7 +71,7 @@ _Avoid_: repeating event, annual event
 ### Artwork
 
 **Artwork**:
-An image suited to the Featured Event, composed as a decorative border that bleeds in toward an open centre where the Countdown numeral sits. It is AI-generated if possible, otherwise taken from the Art Library, otherwise the Default Artwork.
+An image suited to the Featured Event, composed as an arch: motifs fill the top and run down the sides, thinning as they descend, and leave open paper in the centre and lower half where the Countdown sits. It is AI-generated if possible, otherwise taken from the Art Library, otherwise the Default Artwork.
 _Avoid_: picture, image, background, illustration
 
 **Art Hint**:

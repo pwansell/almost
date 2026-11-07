@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pillow>=11", "google-genai>=1.0"]
+# dependencies = ["pillow>=11", "google-genai>=1.0", "numpy>=2"]
 # ///
 """Throwaway prototype: render sample Plates for Almost.
 
@@ -34,10 +34,9 @@ GREYS = 16
 HOUSE_STYLE = """\
 An ink and wash painting in the Japanese sumi-e tradition, portrait 3:4.
 Subject: {subject}.
-Composition: a decorative border. Motifs are painted around all four edges, \
-densest in the corners, thinning and dissolving inward into a large open area \
-of plain white paper that fills the middle half of the picture. Keep the bottom \
-fifth light and sparse. The centre must stay completely empty.
+Composition: an arch. Motifs fill the top and run down both sides, densest in \
+the top corners, thinning and dissolving as they descend. The centre and the \
+lower half are open plain white paper; the bottom fifth is almost empty.
 Technique: bold, confident black brush strokes with only two or three flat grey \
 wash tones. Strong contrast. No fine hatching, no smooth gradients, no paper texture.
 Absolutely no text, letters, numbers, signatures, seals or stamps."""
@@ -154,13 +153,64 @@ def fit_size(draw, text, path, max_w, start, minimum, tracking_ratio=0.0, wght=5
     return f, text.rstrip() + "…"
 
 
-def halo_text(base: Image.Image, draw_fn, spread: int = 26):
-    """Draw text with a soft white halo so it sits cleanly on the Artwork."""
+def countdown_block(n: int, safe_w: int) -> Image.Image:
+    """The numeral and its word, as a tight white-on-black mask."""
+    canvas = Image.new("L", (W, 900), 0)
+    d = ImageDraw.Draw(canvas)
+    if n >= 2:
+        f_num = font(FONT, 560 if n < 100 else 430, 500, opsz=28)
+        d.text((W / 2, 560), str(n), font=f_num, fill=255, anchor="ms")
+        d.text((W / 2, 690), "days", font=font(FONT_ITALIC, 96, 400, opsz=16), fill=255, anchor="ms")
+    else:
+        word = "Today" if n == 0 else "Tomorrow"
+        f_word, _ = fit_size(d, word, FONT_ITALIC, safe_w - 80, 260, 120, wght=500)
+        d.text((W / 2, 500), word, font=f_word, fill=255, anchor="ms")
+    return canvas.crop(canvas.getbbox())
+
+
+def place_block(block: Image.Image, art: Image.Image, region, pad: int = 40, step: int = 8):
+    """Find where the block overlaps the least ink, preferring the centre and full size.
+
+    Returns (x, y, block) with the block possibly scaled down.
+    """
+    import numpy as np
+
+    # 1 wherever there is any visible ink, so even a thin overlap counts fully.
+    ink = (255 - np.asarray(art.filter(ImageFilter.MaxFilter(1)), dtype=np.float64) > 40).astype(np.float64)
+    ink = ink.reshape(H // step, step, W // step, step).max(axis=(1, 3)) if H % step == 0 and W % step == 0 \
+        else ink[::step, ::step]
+    integ = np.pad(ink.cumsum(0).cumsum(1), ((1, 0), (1, 0)))
+    rx0, ry0, rx1, ry1 = region
+    cx, cy = (rx0 + rx1) / 2, (ry0 + ry1) / 2
+    best = None
+    for scale in (1.0, 0.92, 0.84, 0.76, 0.68):
+        bw, bh = round(block.width * scale) + 2 * pad, round(block.height * scale) + 2 * pad
+        if bw > rx1 - rx0 or bh > ry1 - ry0:
+            continue
+        gw, gh = bw // step, bh // step
+        ys = np.arange(ry0 // step, (ry1 - bh) // step + 1)
+        xs = np.arange(rx0 // step, (rx1 - bw) // step + 1)
+        Y, X = np.meshgrid(ys, xs, indexing="ij")
+        box = integ[Y + gh, X + gw] - integ[Y, X + gw] - integ[Y + gh, X] + integ[Y, X]
+        frac_ink = box / (gw * gh)
+        dist = np.hypot((X * step + bw / 2 - cx) / W, (Y * step + bh / 2 - cy) / H)
+        cost = 1000 * frac_ink + 60 * dist + 40 * (1 - scale)
+        i = np.unravel_index(cost.argmin(), cost.shape)
+        if best is None or cost[i] < best[0]:
+            best = (cost[i], X[i] * step + pad, Y[i] * step + pad, scale)
+    _, x, y, scale = best
+    if scale != 1.0:
+        block = block.resize((round(block.width * scale), round(block.height * scale)), Image.LANCZOS)
+    return int(x), int(y), block
+
+
+def paste_with_halo(base: Image.Image, block: Image.Image, xy, spread: int = 26):
+    """Draw the block in black with a soft white halo so it sits cleanly on the Artwork."""
     mask = Image.new("L", base.size, 0)
-    draw_fn(ImageDraw.Draw(mask), 255)
+    mask.paste(block, xy)
     glow = mask.filter(ImageFilter.MaxFilter(spread | 1)).filter(ImageFilter.GaussianBlur(spread))
     base.paste(255, (0, 0), glow.point(lambda v: min(255, v * 2)))
-    draw_fn(ImageDraw.Draw(base), 0)
+    base.paste(0, (0, 0), mask)
 
 
 # ---------- Marks ----------
@@ -203,23 +253,10 @@ def render_plate(art: Image.Image, event: Event, today: date, up_next: Event | N
         f_up = font(FONT_ITALIC, 40, 400)
         d.text((W / 2, top + 195), f"then {up_next.name} · {n} days", font=f_up, fill=60, anchor="ms")
 
-    # Countdown, centred in the open area above the Banner
-    cy = (MY + top) / 2
-    n = days_until(event, today)
-    if n >= 2:
-        f_num = font(FONT, 560 if n < 100 else 430, 500, opsz=28)
-        f_unit = font(FONT_ITALIC, 96, 400, opsz=16)
-
-        def draw(dd, fill):
-            dd.text((W / 2, cy + 120), str(n), font=f_num, fill=fill, anchor="ms")
-            dd.text((W / 2, cy + 250), "days", font=f_unit, fill=fill, anchor="ms")
-    else:
-        word = "Today" if n == 0 else "Tomorrow"
-        f_word, _ = fit_size(d, word, FONT_ITALIC, safe_w - 80, 260, 120, wght=500)
-
-        def draw(dd, fill):
-            dd.text((W / 2, cy + 60), word, font=f_word, fill=fill, anchor="ms")
-    halo_text(img, draw)
+    # Countdown: typeset as one block, then placed in the Artwork's open space.
+    block = countdown_block(days_until(event, today), safe_w)
+    x, y, block = place_block(block, img, (MX, MY, W - MX, top - 20))
+    paste_with_halo(img, block, (x, y))
 
     d = ImageDraw.Draw(img)
     if low_battery:
