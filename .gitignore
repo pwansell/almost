@@ -1,0 +1,4 @@
+.env
+prototypes/sample_plates/out/
+__pycache__/
+.DS_Store
