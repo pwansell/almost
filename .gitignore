@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 studio/dev/out/
 .venv/
+frame/frame.conf
