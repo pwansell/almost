@@ -1,0 +1,6 @@
+[Unit]
+Description=Almost: show today's Plate and go back to sleep
+
+[Service]
+Type=oneshot
+ExecStart=/home/root/almost/almost.sh show

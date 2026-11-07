@@ -1,0 +1,11 @@
+[Unit]
+Description=Almost: use the current Plate as the sleep screen
+Before=xochitl.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/root/almost/almost.sh mount
+
+[Install]
+WantedBy=multi-user.target

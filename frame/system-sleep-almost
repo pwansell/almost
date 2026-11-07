@@ -1,0 +1,7 @@
+#!/bin/sh
+# Installed as /lib/systemd/system-sleep/almost. systemd runs it with
+# "pre" before every suspend and "post" after every resume.
+case "$1" in
+    pre) /home/root/almost/almost.sh arm ;;
+    post) /home/root/almost/almost.sh wake ;;
+esac
