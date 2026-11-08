@@ -7,6 +7,10 @@
 #   almost.sh mount   lay current.png over the stock sleep image (at boot)
 #   almost.sh show    fetch new Plates, pick today's, restart the notes app, sleep
 #   almost.sh fetch   just fetch new Plates from the Studio
+#   almost.sh sleep   press the power key now (sleep, showing the Plate)
+#   almost.sh resleep go back to sleep unless a computer or SSH session is
+#                     connected (then check
+#                     again later); used after any wake that wasn't the alarm
 #
 # The Studio's address lives in $HOME_DIR/frame.conf as
 #   STUDIO_URL=https://<worker>/frame/<FRAME_TOKEN>
@@ -26,6 +30,7 @@ WAKE_AT="00:05"
 CRITICAL_PERCENT=5
 LOG=$HOME_DIR/almost.log
 RETRY_AT="06:00"
+RESLEEP_AFTER=120   # seconds awake after a non-alarm wake (button, cable)
 STUDIO_URL=""
 [ -f "$HOME_DIR/frame.conf" ] && . "$HOME_DIR/frame.conf"
 
@@ -67,7 +72,7 @@ fetch() {
     list=$STATE/manifest.txt
     # Wi-Fi takes a few seconds to come back after waking.
     tries=0
-    until download "$STUDIO_URL/manifest.txt?battery=$battery" "$list.tmp"; do
+    until ip=$(wifi_ip) && download "$STUDIO_URL/manifest.txt?battery=$battery&ip=$ip" "$list.tmp"; do
         tries=$((tries + 1))
         if [ $tries -ge 9 ]; then
             log "fetch failed: Studio unreachable"
@@ -150,6 +155,10 @@ press_power() {
 }
 
 show() {
+    # The notes app suspends the tablet within seconds of an unattended wake,
+    # which froze the first nightly fetch mid-download. Keep it stopped until
+    # the new Plate is in place; the restart below brings it back.
+    systemctl stop xochitl
     rm -f "$STATE/fetch-failed"
     fetch || true
     plate=$(choose_plate) || plate=""
@@ -166,6 +175,42 @@ show() {
     press_power
 }
 
+wifi_ip() {  # the tablet's Wi-Fi address, so we can SSH in when it's mounted
+    ip -4 addr show wlan0 2>/dev/null | awk '/inet /{split($2, a, "/"); print a[1]; exit}'
+    return 0
+}
+
+ssh_session_open() {  # an established connection on port 22 (hex 0016)
+    awk '$2 ~ /:0016$/ && $4 == "01" {found=1} END {exit !found}' \
+        /proc/net/tcp /proc/net/tcp6 2>/dev/null
+}
+
+computer_connected() {
+    # A computer on the USB cable "configures" the tablet as a device; a plain
+    # charger never does, so charging in the frame still sleeps on the Plate.
+    grep -qx configured /sys/class/udc/*/state 2>/dev/null
+}
+
+schedule_resleep() {
+    # Each request gets its own unit; only the newest one acts (see resleep).
+    id=$(date +%s)$$
+    echo "$id" > "$STATE/resleep"
+    systemd-run --quiet --unit="almost-resleep-$id" --on-active=$RESLEEP_AFTER \
+        /home/root/almost/almost.sh resleep "$id"
+}
+
+resleep() {
+    [ "${1:-}" = "$(cat "$STATE/resleep" 2>/dev/null)" ] || return 0
+    # A computer on USB, or someone SSHed in over Wi-Fi: stay awake and look
+    # again later; once they're done it drifts back to sleep.
+    if computer_connected || ssh_session_open; then
+        schedule_resleep
+        return
+    fi
+    log "back to sleep"
+    press_power
+}
+
 wake() {
     alarm=$(cat "$STATE/alarm" 2>/dev/null || echo 0)
     now=$(date +%s)
@@ -174,7 +219,10 @@ wake() {
         # Leave the sleep hook promptly; do the work as its own service.
         systemctl --no-block start almost-show.service
     else
-        log "woken by hand; staying awake"
+        # The button, or plugging/unplugging the cable. Stay up briefly (long
+        # enough to SSH in over USB), then sleep showing the Plate again.
+        log "woken by hand or cable; sleeping again in ${RESLEEP_AFTER}s unless a computer or SSH is connected"
+        schedule_resleep
     fi
 }
 
@@ -184,5 +232,7 @@ case "${1:-}" in
     mount) ensure_mount ;;
     show) show ;;
     fetch) fetch ;;
-    *) echo "usage: $0 arm|wake|mount|show|fetch" >&2; exit 2 ;;
+    resleep) resleep "${2:-}" ;;
+    sleep) press_power ;;
+    *) echo "usage: $0 arm|wake|mount|show|fetch|resleep|sleep" >&2; exit 2 ;;
 esac

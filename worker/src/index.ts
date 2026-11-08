@@ -1,6 +1,6 @@
 // Almost: the Worker in front of the Studio's R2 bucket.
 //
-//   GET /frame/<FRAME_TOKEN>/manifest.txt?battery=NN    Frame's nightly check-in (or .json)
+//   GET /frame/<FRAME_TOKEN>/manifest.txt?battery=NN&ip=A.B.C.D  Frame's nightly check-in (or .json)
 //   GET /frame/<FRAME_TOKEN>/<YYYY-MM-DD|charge-me>.png  a Plate
 //   GET /preview/<PREVIEW_TOKEN>                         the Preview page (starts a render)
 //   GET /preview/<PREVIEW_TOKEN>/manifest.json           for the page to poll
@@ -45,6 +45,14 @@ async function recordBattery(env: Env, raw: string | null): Promise<void> {
   });
 }
 
+// The Frame's Wi-Fi address, so it can be reached over SSH once mounted.
+async function recordAddress(env: Env, raw: string | null): Promise<void> {
+  if (!raw || !/^\d{1,3}(\.\d{1,3}){3}$/.test(raw)) return;
+  await env.BUCKET.put("state/frame-ip.json", JSON.stringify({ ip: raw, at: new Date().toISOString() }), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
 async function startRender(env: Env): Promise<"started" | "recent" | "failed"> {
   const last = await env.BUCKET.get("state/last-dispatch.json");
   if (last) {
@@ -79,6 +87,7 @@ export default {
     if (area === "frame" && sameToken(token ?? "", env.FRAME_TOKEN)) {
       if (file === "manifest.json" || file === "manifest.txt") {
         await recordBattery(env, url.searchParams.get("battery"));
+        await recordAddress(env, url.searchParams.get("ip"));
         return object(env, `plates/${file}`, file.endsWith(".txt") ? "text/plain" : "application/json");
       }
       if (file && PLATE.test(file)) return object(env, `plates/${file}`, "image/png");
