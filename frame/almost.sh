@@ -78,12 +78,21 @@ fetch() {
     mkdir -p "$PLATES"
     battery=$(cat /sys/class/power_supply/max77818_battery/capacity)
     list=$STATE/manifest.txt
-    # Wi-Fi takes a few seconds to come back after waking.
+    # Wi-Fi can take minutes to come back after waking: the first joins often
+    # fail, and each failure makes wpa_supplicant back off for longer. Wait up
+    # to 5 minutes, and every minute tell it to skip the backoff and try again.
     tries=0
     until ip=$(wifi_ip) && download "$STUDIO_URL/manifest.txt?battery=$battery&ip=$ip" "$list.tmp"; do
         tries=$((tries + 1))
-        if [ $tries -ge 9 ]; then
-            log "fetch failed: Studio unreachable"
+        if [ $((tries % 6)) = 0 ] && [ -z "$(wifi_ip)" ] && command -v wpa_cli >/dev/null; then
+            wpa_cli -i wlan0 bssid_ignore clear >/dev/null 2>&1 ||
+                wpa_cli -i wlan0 blacklist clear >/dev/null 2>&1  # older name
+            wpa_cli -i wlan0 enable_network all >/dev/null 2>&1
+            wpa_cli -i wlan0 reassociate >/dev/null 2>&1
+            log "fetch: no Wi-Fi yet; asked it to try again"
+        fi
+        if [ $tries -ge 30 ]; then
+            log "fetch failed: Studio unreachable after 5 minutes"
             touch "$STATE/fetch-failed"
             return 1
         fi
