@@ -160,12 +160,14 @@ def low_battery_mark(d: ImageDraw.ImageDraw, x: int, y: int):
     d.rectangle([x + 8, y + 8, x + 18, y + 26], fill=0)
 
 
-def charged_mark(d: ImageDraw.ImageDraw, x: int, y: int):
-    """A full battery and the word, so a glance across the room says unplug me."""
-    d.rounded_rectangle([x - 150, y - 12, x + 92, y + 46], radius=10, fill=255)
-    d.text((x - 16, y + 30), "charged", font=font(FONT_ITALIC, 34, 500), fill=0, anchor="rs")
-    d.rounded_rectangle([x, y, x + 70, y + 34], radius=5, outline=0, width=4, fill=0)
-    d.rectangle([x + 70, y + 10, x + 77, y + 24], fill=0)
+def charged_mark(d: ImageDraw.ImageDraw, right: int, baseline: int):
+    """A small full battery and the word, right-aligned at the bottom of the
+    Banner, where the Artwork never reaches."""
+    x = right - 44
+    y = baseline - 18
+    d.rounded_rectangle([x, y, x + 38, y + 18], radius=3, outline=0, width=3, fill=0)
+    d.rectangle([x + 38, y + 5, x + 42, y + 13], fill=0)
+    d.text((x - 10, baseline), "charged", font=font(FONT_ITALIC, 26, 400), fill=60, anchor="rs")
 
 
 def offline_mark(d: ImageDraw.ImageDraw, x: int, y: int):
@@ -179,9 +181,9 @@ def offline_mark(d: ImageDraw.ImageDraw, x: int, y: int):
 
 def _marks(img: Image.Image, L: Layout, low_battery: bool, offline: bool, charged: bool = False):
     d = ImageDraw.Draw(img)
-    if charged:  # replaces the Low Battery Mark: a full battery outranks an old low report
-        charged_mark(d, L.width - L.right - 110, L.top + 30)
-    elif low_battery:
+    if charged:
+        charged_mark(d, L.width - L.right - 40, L.height - L.bottom - 18)
+    if low_battery and not charged:  # a full battery outranks an old low report
         low_battery_mark(d, L.width - L.right - 110, L.top + 30)
     if offline:
         offline_mark(d, L.left + 30, L.top + 24)
