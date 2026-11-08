@@ -17,7 +17,7 @@ export interface Env {
   GITHUB_WORKFLOW: string;
 }
 
-const PLATE = /^(\d{4}-\d{2}-\d{2}|charge-me)\.png$/;
+const PLATE = /^(\d{4}-\d{2}-\d{2}(-charged)?|charge-me)\.png$/;
 const DISPATCH_GAP_MS = 3 * 60 * 1000;
 
 const notFound = () => new Response("Not found", { status: 404 });
@@ -164,7 +164,9 @@ function previewPage(status: "started" | "recent" | "failed"): string {
       if (m.generated_at === shown) return;
       shown = m.generated_at;
       document.getElementById("stamp").textContent = "Rendered " + fmt(m.generated_at);
-      const files = [...m.plates, m.charge_me].filter(Boolean);
+      // Charged copies differ only by their corner mark; show the first as a sample.
+      const charged = m.plates.filter((p) => p.file.endsWith("-charged.png")).slice(0, 1);
+      const files = [...m.plates.filter((p) => !p.file.endsWith("-charged.png")), ...charged, m.charge_me].filter(Boolean);
       document.getElementById("plates").replaceChildren(...files.map((p) => {
         const li = document.createElement("li");
         const img = document.createElement("img");

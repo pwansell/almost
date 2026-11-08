@@ -6,11 +6,16 @@
 #                     show today's Plate and go back to sleep
 #   almost.sh mount   lay current.png over the stock sleep image (at boot)
 #   almost.sh show    fetch new Plates, pick today's, restart the notes app, sleep
+#   almost.sh refresh the same without fetching (charge checks, unplugging)
 #   almost.sh fetch   just fetch new Plates from the Studio
 #   almost.sh sleep   press the power key now (sleep, showing the Plate)
 #   almost.sh resleep go back to sleep unless a computer or SSH session is
-#                     connected (then check
-#                     again later); used after any wake that wasn't the alarm
+#                     connected (then check again later); used after any wake
+#                     that wasn't the alarm
+#
+# Charging: while on a charger the Frame also wakes every 30 minutes until the
+# battery is full, then shows the day's Charged copy (the Charged Mark) until
+# it's unplugged.
 #
 # The Studio's address lives in $HOME_DIR/frame.conf as
 #   STUDIO_URL=https://<worker>/frame/<FRAME_TOKEN>
@@ -31,6 +36,9 @@ CRITICAL_PERCENT=5
 LOG=$HOME_DIR/almost.log
 RETRY_AT="06:00"
 RESLEEP_AFTER=120   # seconds awake after a non-alarm wake (button, cable)
+CHARGE_CHECK=1800   # seconds between battery checks while charging
+BATTERY=/sys/class/power_supply/max77818_battery
+CHARGER=/sys/class/power_supply/max77818-charger
 STUDIO_URL=""
 [ -f "$HOME_DIR/frame.conf" ] && . "$HOME_DIR/frame.conf"
 
@@ -104,12 +112,33 @@ fetch() {
     [ -f "$STATE/fetch-failed" ] || log "fetched $got new Plate(s)"
 }
 
+on_charger() { [ "$(cat $CHARGER/online 2>/dev/null)" = 1 ]; }
+
+battery_full() {
+    [ "$(cat $BATTERY/status 2>/dev/null)" = Full ] || [ "$(cat $BATTERY/capacity)" -ge 100 ]
+}
+
+showing() { cat "$STATE/showing" 2>/dev/null; }
+
 arm() {
+    had_failed_fetch=no
+    [ -f "$STATE/fetch-failed" ] && had_failed_fetch=yes
     at=$(next_wake_epoch)
+    kind=nightly
+    # Charging and not yet showing the Charged Mark: check back in 30 minutes,
+    # unless the next nightly wake (or the 06:00 retry) comes sooner.
+    if [ ! -s "$HOME_DIR/test-interval" ] && [ $had_failed_fetch = no ] && on_charger; then
+        case "$(showing)" in
+            *-charged.png) ;;
+            *) check=$(($(date +%s) + CHARGE_CHECK))
+               [ "$check" -lt "$at" ] && { at=$check; kind=charge; } ;;
+        esac
+    fi
+    echo "$kind" > "$STATE/alarm-kind"
     echo 0 > $RTC/wakealarm
     echo "$at" > $RTC/wakealarm
     echo "$at" > "$STATE/alarm"
-    log "armed for $(TZ=$TZ_HOME date -d "@$at" '+%F %T %Z')"
+    log "armed for $(TZ=$TZ_HOME date -d "@$at" '+%F %T %Z') ($kind)"
 }
 
 ensure_mount() {
@@ -126,7 +155,7 @@ choose_plate() {
     if [ -s "$HOME_DIR/test-interval" ]; then
         n=$(cat "$STATE/counter" 2>/dev/null || echo 0)
         echo $((n + 1)) > "$STATE/counter"
-        set -- $(ls "$PLATES"/[0-9]*.png 2>/dev/null)
+        set -- $(ls "$PLATES"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].png 2>/dev/null)
         [ $# -gt 0 ] || return 1
         shift $((n % $#))
         echo "$1"
@@ -142,7 +171,12 @@ choose_plate() {
         [ "$d" -gt "$today" ] && continue
         best=$p
     done
-    [ -n "$best" ] && echo "$best"
+    [ -n "$best" ] || return 1
+    # Full on the charger: the same day's copy with the Charged Mark.
+    if on_charger && battery_full && [ -f "${best%.png}-charged.png" ]; then
+        best="${best%.png}-charged.png"
+    fi
+    echo "$best"
 }
 
 press_power() {
@@ -154,16 +188,19 @@ press_power() {
     done
 }
 
-show() {
+show() {  # show [nofetch]
     # The notes app suspends the tablet within seconds of an unattended wake,
     # which froze the first nightly fetch mid-download. Keep it stopped until
     # the new Plate is in place; the restart below brings it back.
     systemctl stop xochitl
-    rm -f "$STATE/fetch-failed"
-    fetch || true
+    if [ "${1:-}" != nofetch ]; then
+        rm -f "$STATE/fetch-failed"
+        fetch || true
+    fi
     plate=$(choose_plate) || plate=""
     if [ -n "$plate" ]; then
         cp "$plate" "$CURRENT.tmp" && cat "$CURRENT.tmp" > "$CURRENT" && rm -f "$CURRENT.tmp"
+        basename "$plate" > "$STATE/showing"
         log "showing $(basename "$plate")"
     else
         log "no Plate for today; keeping the current one"
@@ -207,6 +244,12 @@ resleep() {
         schedule_resleep
         return
     fi
+    # Plugged in full, or unplugged with the Charged Mark up: change Plates.
+    if [ ! -s "$HOME_DIR/test-interval" ] && want=$(choose_plate) &&
+       [ "$(basename "$want")" != "$(showing)" ]; then
+        show nofetch
+        return
+    fi
     log "back to sleep"
     press_power
 }
@@ -215,9 +258,14 @@ wake() {
     alarm=$(cat "$STATE/alarm" 2>/dev/null || echo 0)
     now=$(date +%s)
     if [ "$now" -ge $((alarm - 5)) ]; then
-        log "woken by alarm"
+        kind=$(cat "$STATE/alarm-kind" 2>/dev/null || echo nightly)
+        log "woken by alarm ($kind)"
         # Leave the sleep hook promptly; do the work as its own service.
-        systemctl --no-block start almost-show.service
+        if [ "$kind" = charge ]; then
+            systemd-run --quiet --unit="almost-refresh-$now" /home/root/almost/almost.sh refresh
+        else
+            systemctl --no-block start almost-show.service
+        fi
     else
         # The button, or plugging/unplugging the cable. Stay up briefly (long
         # enough to SSH in over USB), then sleep showing the Plate again.
@@ -231,8 +279,9 @@ case "${1:-}" in
     wake) wake ;;
     mount) ensure_mount ;;
     show) show ;;
+    refresh) show nofetch ;;
     fetch) fetch ;;
     resleep) resleep "${2:-}" ;;
     sleep) press_power ;;
-    *) echo "usage: $0 arm|wake|mount|show|fetch|resleep|sleep" >&2; exit 2 ;;
+    *) echo "usage: $0 arm|wake|mount|show|refresh|fetch|resleep|sleep" >&2; exit 2 ;;
 esac

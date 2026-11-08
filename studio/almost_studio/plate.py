@@ -160,6 +160,14 @@ def low_battery_mark(d: ImageDraw.ImageDraw, x: int, y: int):
     d.rectangle([x + 8, y + 8, x + 18, y + 26], fill=0)
 
 
+def charged_mark(d: ImageDraw.ImageDraw, x: int, y: int):
+    """A full battery and the word, so a glance across the room says unplug me."""
+    d.rounded_rectangle([x - 150, y - 12, x + 92, y + 46], radius=10, fill=255)
+    d.text((x - 16, y + 30), "charged", font=font(FONT_ITALIC, 34, 500), fill=0, anchor="rs")
+    d.rounded_rectangle([x, y, x + 70, y + 34], radius=5, outline=0, width=4, fill=0)
+    d.rectangle([x + 70, y + 10, x + 77, y + 24], fill=0)
+
+
 def offline_mark(d: ImageDraw.ImageDraw, x: int, y: int):
     cx, cy = x + 38, y + 44
     d.ellipse([x - 4, y - 4, x + 80, y + 52], fill=255)
@@ -169,9 +177,11 @@ def offline_mark(d: ImageDraw.ImageDraw, x: int, y: int):
     d.line([x + 6, y + 2, x + 70, y + 46], fill=0, width=5)
 
 
-def _marks(img: Image.Image, L: Layout, low_battery: bool, offline: bool):
+def _marks(img: Image.Image, L: Layout, low_battery: bool, offline: bool, charged: bool = False):
     d = ImageDraw.Draw(img)
-    if low_battery:
+    if charged:  # replaces the Low Battery Mark: a full battery outranks an old low report
+        charged_mark(d, L.width - L.right - 110, L.top + 30)
+    elif low_battery:
         low_battery_mark(d, L.width - L.right - 110, L.top + 30)
     if offline:
         offline_mark(d, L.left + 30, L.top + 24)
@@ -179,10 +189,11 @@ def _marks(img: Image.Image, L: Layout, low_battery: bool, offline: bool):
 
 # ---------- Plates ----------
 
-def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, offline=False) -> Image.Image:
+def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, offline=False,
+                 charged=False) -> Image.Image:
     img = whiten_paper(cover(art, L.width, L.height).convert("L"))
     if plan.idle:  # Idle: the Idle Artwork alone, no text
-        _marks(img, L, low_battery, offline)
+        _marks(img, L, low_battery, offline, charged)
         return dither(img, L.greys)
 
     d = ImageDraw.Draw(img)
@@ -200,7 +211,7 @@ def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, 
     block = countdown_block(plan.days_left, L)
     x, y, block = place_block(block, img, (L.left, L.top, L.width - L.right, top - 20))
     paste_with_halo(img, block, (x, y))
-    _marks(img, L, low_battery, offline)
+    _marks(img, L, low_battery, offline, charged)
     return dither(img, L.greys)
 
 

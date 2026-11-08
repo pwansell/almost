@@ -77,10 +77,12 @@ def render(store, settings: dict, ics: bytes, today: date) -> None:
                     ev, store, art_cfg["model"], art_cfg["monthly_generation_cap"], today, log)
             art = cache[ev.artwork_key]
         offline = i + 1 >= settings["offline_mark_from_day"]
-        data = png_bytes(render_plate(plan, art, L, low_battery=low, offline=offline))
-        name = f"{day.isoformat()}.png"
-        store.put(f"plates/{name}", data, "image/png")
-        manifest["plates"].append({"file": name, "sha256": hashlib.sha256(data).hexdigest()})
+        # Each day also gets a copy with the Charged Mark, for a Frame on its charger.
+        for suffix, charged in (("", False), ("-charged", True)):
+            data = png_bytes(render_plate(plan, art, L, low_battery=low, offline=offline, charged=charged))
+            name = f"{day.isoformat()}{suffix}.png"
+            store.put(f"plates/{name}", data, "image/png")
+            manifest["plates"].append({"file": name, "sha256": hashlib.sha256(data).hexdigest()})
 
     data = png_bytes(render_charge_me(L))
     store.put("plates/charge-me.png", data, "image/png")
@@ -95,7 +97,7 @@ def render(store, settings: dict, ics: bytes, today: date) -> None:
     files = manifest["plates"] + [manifest["charge_me"]]
     store.put("plates/manifest.txt", "".join(f"{p['sha256']}  {p['file']}\n" for p in files).encode(), "text/plain")
     idle_days = sum(1 for i in range(days) if plan_day(events, today + timedelta(days=i)).idle)
-    log(f"rendered {days} Plates ({idle_days} Idle) and the Charge Me Plate; removed {len(stale)} stale")
+    log(f"rendered {days} Plates, each with a Charged copy ({idle_days} Idle) and the Charge Me Plate; removed {len(stale)} stale")
 
 
 def main() -> None:

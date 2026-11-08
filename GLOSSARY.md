@@ -87,7 +87,7 @@ The border on each edge of the screen that the mat hides, kept clear of anything
 _Avoid_: padding, bezel, safe area
 
 **House Style**:
-The single visual style that all generated Artwork is made in: ink and wash, meaning brush ink with soft grey washes in the manner of sumi-e.
+One of the visual styles that generated Artwork is made in: ink and wash (sumi-e), linocut, copperplate etching or art deco. Each Event gets one, chosen at random but fixed for that Event, so its Artwork keeps the same look every day and every year. The Art Library and Default Artwork are in ink and wash.
 _Avoid_: theme, filter, look
 
 **Art Library**:

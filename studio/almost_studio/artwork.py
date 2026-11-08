@@ -1,4 +1,4 @@
-"""Artwork: generated once per Event in the House Style, else Art Library, else Default."""
+"""Artwork: generated once per Event in one of the House Styles, else Art Library, else Default."""
 
 from __future__ import annotations
 
@@ -12,17 +12,52 @@ from PIL import Image
 from .events import Event
 from .store import LocalStore, R2Store
 
-HOUSE_STYLE = """\
-An ink and wash painting in the Japanese sumi-e tradition, portrait 3:4.
-Subject: {subject}.
+# House Styles: each Event's Artwork is made in one, picked from its artwork_key
+# so the choice is random across Events but fixed for each one. Etching and deco
+# were the ones that strayed in trials (busy centre, ignoring the subject), so
+# the shared composition and subject rules are spelled out for every style.
+COMPOSITION = """\
+Subject: {subject}. Every motif must clearly depict this subject.
 Composition: an arch. Motifs fill the top and run down both sides, densest in \
 the top corners, thinning and dissolving as they descend. The centre and the \
-lower half are open plain white paper; the bottom fifth is almost empty.
-Technique: bold, confident black brush strokes with only two or three flat grey \
-wash tones. Strong contrast. No fine hatching, no smooth gradients, no paper texture.
-The painting fills the whole canvas edge to edge: no scroll, rods, mount, frame, \
+lower half are open plain white paper with nothing drawn in them; the bottom \
+fifth is almost empty.
+The image fills the whole canvas edge to edge: no frame, scroll, rods, mount, \
 border lines or visible paper edges.
-Absolutely no text, letters, numbers, signatures, seals or stamps."""
+Absolutely no text, letters, numbers, signatures, seals or stamps, and no \
+signs, cards, labels or banners with writing on them."""
+
+HOUSE_STYLES = {
+    "ink": """\
+An ink and wash painting in the Japanese sumi-e tradition, portrait 3:4.
+Technique: bold, confident black brush strokes with only two or three flat grey \
+wash tones. Strong contrast. No fine hatching, no smooth gradients, no paper texture.""",
+    "linocut": """\
+A black and white linocut print, portrait 3:4.
+Technique: bold carved black shapes on white, visible gouge marks, crisp edges, \
+no grey tones at all. Strong graphic contrast.""",
+    "etching": """\
+A copperplate etching, portrait 3:4.
+Technique: black ink lines on white, tone built only from hatching and \
+cross-hatching, with the lines kept fairly bold and widely spaced. Classic \
+engraved book-illustration feel. No washes, no smooth gradients, no paper texture.""",
+    "deco": """\
+An Art Deco poster illustration, portrait 3:4.
+Technique: the subject's objects and figures drawn with elegant geometric \
+stylisation, strong symmetry, sunburst and stepped motifs as accents only. Flat \
+areas of black and two or three flat greys on white. No gradients, no paper texture.""",
+}
+
+
+def house_style(artwork_key: str) -> str:
+    """The House Style for one Event: stable, so its Artwork never changes look."""
+    names = sorted(HOUSE_STYLES)
+    return names[int(artwork_key, 16) % len(names)]
+
+
+def prompt(style: str, subject: str) -> str:
+    return HOUSE_STYLES[style] + "\n" + COMPOSITION.format(subject=subject)
+
 
 # Art Library themes: keyword -> subject. Generated once with `make-library`.
 LIBRARY = {
@@ -55,14 +90,14 @@ class GenerationCapReached(Exception):
     pass
 
 
-def _generate(subject: str, model: str) -> Image.Image:
+def _generate(subject: str, model: str, style: str = "ink") -> Image.Image:
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     resp = client.models.generate_content(
         model=model,
-        contents=HOUSE_STYLE.format(subject=subject),
+        contents=prompt(style, subject),
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
             image_config=types.ImageConfig(aspect_ratio="3:4"),
@@ -101,9 +136,10 @@ def artwork_for(event: Event, store, model: str, cap: int, today: date, log) -> 
     try:
         _take_generation(store, cap, today)
         subject = event.name + (f" ({event.art_hint})" if event.art_hint else "")
-        img = _generate(subject, model)
+        style = house_style(event.artwork_key)
+        img = _generate(subject, model, style)
         store.put(key, _png(img), "image/png")
-        log("generated Artwork")
+        log(f"generated Artwork ({style})")
         return img
     except Exception as e:  # cap, no key, API error: fall back, never fail the run
         log(f"Artwork generation unavailable ({type(e).__name__}); using the Art Library")
