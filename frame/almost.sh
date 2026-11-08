@@ -4,7 +4,8 @@
 #   almost.sh arm     set the RTC wake alarm (called just before every sleep)
 #   almost.sh wake    called just after every resume; if the alarm woke us,
 #                     show today's Plate and go back to sleep
-#   almost.sh mount   lay current.png over the stock sleep image (at boot)
+#   almost.sh mount   lay current.png over the stock sleep image
+#   almost.sh boot    the same at boot, then restart the notes app to read it
 #   almost.sh show    fetch new Plates, pick today's, restart the notes app, sleep
 #   almost.sh refresh the same without fetching (charge checks, unplugging)
 #   almost.sh fetch   just fetch new Plates from the Studio
@@ -188,6 +189,14 @@ choose_plate() {
     echo "$best"
 }
 
+restart_notes_app() {
+    # Clear the start counter first: if the notes app hits its start limit
+    # (4 in 10 minutes), reMarkable's failure handler reboots the tablet, or
+    # can even switch it to the other firmware partition.
+    systemctl reset-failed xochitl.service 2>/dev/null
+    systemctl restart xochitl
+}
+
 press_power() {
     # struct input_event: 8-byte time, u16 type, u16 code, s32 value. KEY_POWER=116.
     for v in '\001' '\0'; do
@@ -216,7 +225,7 @@ show() {  # show [nofetch]
     fi
     ensure_mount
     # The notes app only reads the sleep image at startup.
-    systemctl restart xochitl
+    restart_notes_app
     sleep 20
     press_power
 }
@@ -287,10 +296,14 @@ case "${1:-}" in
     arm) arm ;;
     wake) wake ;;
     mount) ensure_mount ;;
+    boot) ensure_mount && restart_notes_app
+          # After an unattended reboot, drift back to sleep on the Plate too.
+          log "booted; sleeping in ${RESLEEP_AFTER}s unless a computer or SSH is connected"
+          schedule_resleep ;;
     show) show ;;
     refresh) show nofetch ;;
     fetch) fetch ;;
     resleep) resleep "${2:-}" ;;
     sleep) press_power ;;
-    *) echo "usage: $0 arm|wake|mount|show|refresh|fetch|resleep|sleep" >&2; exit 2 ;;
+    *) echo "usage: $0 arm|wake|mount|boot|show|refresh|fetch|resleep|sleep" >&2; exit 2 ;;
 esac

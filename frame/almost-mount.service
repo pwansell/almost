@@ -1,11 +1,16 @@
 [Unit]
 Description=Almost: use the current Plate as the sleep screen
-Before=xochitl.service
+# On this firmware /home (where the Plate and this script live) mounts only
+# after the notes app has started, so the overlay can't be ready in time.
+# Instead: once both are up, lay the overlay and restart the notes app once.
+# (Ordering this before the notes app makes a cycle and systemd drops it.)
+After=home.mount xochitl.service
+RequiresMountsFor=/home/root/almost
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/home/root/almost/almost.sh mount
+ExecStart=/home/root/almost/almost.sh boot
 
 [Install]
 WantedBy=multi-user.target

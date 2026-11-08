@@ -22,10 +22,9 @@ while grep -q " /usr/share/remarkable/suspended.png " /proc/mounts; do umount /u
 systemctl daemon-reload
 systemctl enable almost-mount.service
 # restart, not start: the oneshot stays "active" after the unmount above,
-# so start would do nothing and leave the stock sleep image showing.
+# so start would do nothing and leave the stock sleep image showing. Its
+# "boot" step also restarts the notes app so it reads the new image.
 systemctl restart almost-mount.service
 grep -q " /usr/share/remarkable/suspended.png " /proc/mounts
-# The notes app only reads the sleep image at startup.
-systemctl restart xochitl
 echo installed
 '
