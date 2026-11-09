@@ -78,6 +78,10 @@ _Avoid_: picture, image, background, illustration
 Optional words in an Event's description that steer the generated Artwork and double as the Art Library keyword.
 _Avoid_: prompt, tag, keyword
 
+**Style Request**:
+An optional `style:` line in an Event's description naming the House Style its Artwork is made in, loosely (for example "sumi-e" or "Art Deco"). If it names none, the Event gets its random House Style. Changing it makes new Artwork.
+_Avoid_: style tag, theme
+
 **Banner**:
 The solid band across the bottom of the Frame that carries the Featured Event's name.
 _Avoid_: footer, caption, title bar
@@ -87,7 +91,7 @@ The border on each edge of the screen that the mat hides, kept clear of anything
 _Avoid_: padding, bezel, safe area
 
 **House Style**:
-One of the visual styles that generated Artwork is made in: ink and wash (sumi-e), linocut, copperplate etching or art deco. Each Event gets one, chosen at random but fixed for that Event, so its Artwork keeps the same look every day and every year. The Art Library and Default Artwork are in ink and wash.
+One of the visual styles that generated Artwork is made in: sumi-e ink and wash, or art deco. Each Event gets the one its Style Request names, or else one chosen at random but fixed for that Event, so its Artwork keeps the same look every day and every year. The Art Library and Default Artwork are in sumi-e.
 _Avoid_: theme, filter, look
 
 **Art Library**:

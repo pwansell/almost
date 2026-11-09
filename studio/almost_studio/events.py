@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 import icalendar
 import recurring_ical_events
 
-ART_HINT = re.compile(r"^\s*art\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 TAG = re.compile(r"<[^>]+>")
 
 
@@ -20,12 +19,15 @@ class Event:
     name: str
     day: date
     art_hint: str = ""
+    style_request: str = ""
 
     @property
     def artwork_key(self) -> str:
-        """Same title and Art Hint means the same Artwork, so a Recurring Event
-        reuses it every year and editing the hint makes a new one."""
+        """Same title, Art Hint and Style Request means the same Artwork, so a
+        Recurring Event reuses it every year and editing either makes a new one."""
         raw = f"{self.name.strip().lower()}|{self.art_hint.strip().lower()}"
+        if self.style_request.strip():  # only when set, so older keys stay the same
+            raw += f"|{self.style_request.strip().lower()}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -49,9 +51,19 @@ class DayPlan:
         return " & ".join(e.name for e in self.featured)
 
 
-def art_hint(description: str) -> str:
-    m = ART_HINT.search(TAG.sub("\n", description or ""))
+def _labelled_line(label: str, description: str) -> str:
+    """The text after `label:` on a line of an Event's description, HTML stripped."""
+    pattern = re.compile(rf"^\s*{label}\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+    m = pattern.search(TAG.sub("\n", description or ""))
     return m.group(1) if m else ""
+
+
+def art_hint(description: str) -> str:
+    return _labelled_line("art", description)
+
+
+def style_request(description: str) -> str:
+    return _labelled_line("style", description)
 
 
 def _yearly_or_single(component) -> bool:
@@ -87,7 +99,8 @@ def parse_events(ics: bytes, start: date, end: date, tz: ZoneInfo) -> list[Event
             continue
         day = _local_day(occ.decoded("DTSTART"), tz)
         if start <= day <= end:
-            events.add(Event(name, day, art_hint(str(occ.get("DESCRIPTION", "")))))
+            desc = str(occ.get("DESCRIPTION", ""))
+            events.add(Event(name, day, art_hint(desc), style_request(desc)))
     return sorted(events, key=lambda e: (e.day, e.name.lower()))
 
 
