@@ -34,6 +34,17 @@ style: sumi-e
 - **`art:`** (the **Art Hint**): words added to the image prompt next to the Event's title. If image generation isn't available, each word is also tried as an **Art Library** keyword (for example `beach`, `cruise`, `birthday`).
 - **`style:`** (the **Style Request**): the **House Style** to use, either `sumi-e` (ink and wash) or `deco` (Art Deco). The wording can be loose, such as `ink and wash` or `Art Deco`. Without this line, or if it names neither style, the Event gets one at random, and keeps it.
 
+### House Styles
+
+| Style | Ask for it with | Look |
+|---|---|---|
+| **Sumi-e** | `style: sumi-e`, `ink and wash`, `ink` or `brush` | A Japanese ink and wash painting: bold, confident black brush strokes with two or three flat grey washes. Loose and airy. The Art Library and Default Artwork are in this style too. |
+| **Deco** | `style: deco` or `Art Deco` | An Art Deco poster: elegant geometric shapes, strong symmetry, sunbursts and stepped motifs, in flat black and greys. Bold and graphic. |
+
+Both styles follow the same layout: motifs form an arch across the top and down the sides, and the centre and lower half are left as plain paper for the Countdown. They are drawn with no text, and kept to flat tones, which suit the 16 greys of e-ink. The prompts are in [`studio/almost_studio/artwork.py`](studio/almost_studio/artwork.py).
+
+Linocut, etching, pen and ink, Japanese woodblock, travel poster, mid-century and folk papercut were also tried, and dropped.
+
 Artwork is generated once per Event and reused every year after that. Changing the title, the `art:` line or the `style:` line makes new Artwork. Generations are capped each month (see [`studio/settings.toml`](studio/settings.toml)). Past the cap, the Art Library is used, and failing that the **Default Artwork**.
 
 ## Repository layout
