@@ -91,6 +91,7 @@ To reinstall the Frame side later: `frame/install.sh [host]`. The host defaults 
 - **Render now, without waiting for the nightly run:** `gh workflow run studio.yml`.
 - **Make the Frame fetch now:** connect over SSH (USB, or Wi-Fi once it's mounted), then run `/home/root/almost/almost.sh show`. The Frame records its Wi-Fi address in R2 at `state/frame-ip.json`.
 - **Logs:** the Frame logs to `/home/root/almost/almost.log`. The workflow logs are public, so the Studio logs only counts and statuses, never Event names or hints.
+- **Show a test image (for example a mat calibration chart):** run `almost.sh hold /path/to/image.png` on the tablet. The image stays up through every wake, fetch and charge check until `almost.sh release`. The Mat Margin in [`studio/settings.toml`](studio/settings.toml) sets how much of each edge the mat hides. Plates centre on the window the mat leaves visible, and the Artwork runs a little under the mat.
 - **Test mode:** put a number of seconds in `/home/root/almost/test-interval` on the tablet. The Frame then wakes that often and cycles through every Plate. Delete the file to go back to nightly wakes.
 
 ## Development

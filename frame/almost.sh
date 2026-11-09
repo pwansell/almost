@@ -13,6 +13,9 @@
 #   almost.sh resleep go back to sleep unless a computer or SSH session is
 #                     connected (then check again later); used after any wake
 #                     that wasn't the alarm
+#   almost.sh hold F  show image F (e.g. a mat calibration chart) and keep it
+#                     up through every wake, fetch and charge check
+#   almost.sh release go back to showing the day's Plate
 #
 # Charging: while on a charger the Frame also wakes every 30 minutes until the
 # battery is full, then shows the day's Charged copy (the Charged Mark) until
@@ -157,6 +160,11 @@ ensure_mount() {
 }
 
 choose_plate() {
+    # A held image (almost.sh hold) wins over everything until released.
+    if [ -f "$STATE/hold" ] && [ -f "$HOME_DIR/held.png" ]; then
+        echo "$HOME_DIR/held.png"
+        return
+    fi
     battery=$(cat /sys/class/power_supply/max77818_battery/capacity)
     if [ "$battery" -le $CRITICAL_PERCENT ] && [ -f "$PLATES/charge-me.png" ]; then
         echo "$PLATES/charge-me.png"
@@ -207,6 +215,23 @@ press_power() {
 }
 
 show() {  # show [nofetch]
+    # One show at a time. Two at once each restart the notes app, and the
+    # second restart can put the tablet to sleep mid-fetch, leaving the first
+    # frozen until a later wake, when it finishes and swaps the Plate.
+    if ! mkdir "$STATE/show.lock" 2>/dev/null; then
+        pid=$(cat "$STATE/show.lock/pid" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            log "show already running; leaving it to that one"
+            return 0
+        fi
+        rm -rf "$STATE/show.lock"; mkdir "$STATE/show.lock"   # stale, from before a reboot
+    fi
+    echo $$ > "$STATE/show.lock/pid"
+    trap 'rm -rf "$STATE/show.lock"' EXIT
+    # A pending resleep timer from before this show is now out of date. Its
+    # clock stops while the tablet sleeps, so it can fire on a later wake,
+    # including mid-way through the nightly show.
+    rm -f "$STATE/resleep"
     # The notes app suspends the tablet within seconds of an unattended wake,
     # which froze the first nightly fetch mid-download. Keep it stopped until
     # the new Plate is in place; the restart below brings it back.
@@ -305,5 +330,12 @@ case "${1:-}" in
     fetch) fetch ;;
     resleep) resleep "${2:-}" ;;
     sleep) press_power ;;
-    *) echo "usage: $0 arm|wake|mount|boot|show|refresh|fetch|resleep|sleep" >&2; exit 2 ;;
+    hold) [ -f "${2:-}" ] || { echo "usage: $0 hold FILE.png" >&2; exit 2; }
+          cp "$2" "$HOME_DIR/held.png" && touch "$STATE/hold"
+          log "holding $(basename "$2")"
+          show nofetch ;;
+    release) rm -f "$STATE/hold" "$HOME_DIR/held.png"
+             log "released the held image"
+             show nofetch ;;
+    *) echo "usage: $0 arm|wake|mount|boot|show|refresh|fetch|resleep|sleep|hold FILE|release" >&2; exit 2 ;;
 esac

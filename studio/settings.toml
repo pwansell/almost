@@ -9,12 +9,16 @@ width = 1404
 height = 1872
 greys = 16
 
-# Mat Margin, in pixels, per edge. Measure once the mat is cut.
+# Mat Margin, in pixels, per edge: how much of the screen to treat as hidden
+# by the mat. Measured 2026-11-10 from photos of calibration charts: the mat
+# sits unevenly (the screen is low and a little right in the opening), and the
+# tablet shifts up to ~15 px between mountings, so each side is the most the
+# mat was seen to hide plus ~20 px. Artwork bleeds a further 40 px under it.
 [mat_margin]
-top = 187
-bottom = 187
-left = 140
-right = 140
+top = 205
+bottom = 35
+left = 115
+right = 85
 
 [battery]
 low_percent = 20   # Low Battery Mark at or below this (reported by the Frame)

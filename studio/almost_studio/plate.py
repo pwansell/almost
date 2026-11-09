@@ -15,6 +15,9 @@ FONT = FONTS / "BodoniModa[opsz,wght].ttf"
 FONT_ITALIC = FONTS / "BodoniModa-Italic[opsz,wght].ttf"
 
 
+ART_BLEED = 40  # px of Artwork under the mat on each side
+
+
 @dataclass(frozen=True)
 class Layout:
     width: int = 1404
@@ -34,6 +37,19 @@ class Layout:
     @property
     def safe_width(self) -> int:
         return self.width - self.left - self.right
+
+    @property
+    def safe_height(self) -> int:
+        return self.height - self.top - self.bottom
+
+    @property
+    def center_x(self) -> float:
+        """The middle of the window the mat leaves visible, not of the screen."""
+        return self.left + self.safe_width / 2
+
+    @property
+    def center_y(self) -> float:
+        return self.top + self.safe_height / 2
 
     @property
     def banner_top(self) -> int:
@@ -193,7 +209,14 @@ def _marks(img: Image.Image, L: Layout, low_battery: bool, offline: bool, charge
 
 def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, offline=False,
                  charged=False) -> Image.Image:
-    img = whiten_paper(cover(art, L.width, L.height).convert("L"))
+    # The Artwork fills the window the mat leaves visible, so its arch is centred
+    # in the mat however unevenly the mat sits on the screen, and bleeds a little
+    # under the mat so a tablet mounted slightly off shows more Artwork, not a
+    # white strip.
+    x0, y0 = max(0, L.left - ART_BLEED), max(0, L.top - ART_BLEED)
+    x1, y1 = min(L.width, L.width - L.right + ART_BLEED), min(L.height, L.height - L.bottom + ART_BLEED)
+    img = Image.new("L", (L.width, L.height), 255)
+    img.paste(whiten_paper(cover(art, x1 - x0, y1 - y0).convert("L")), (x0, y0))
     if plan.idle:  # Idle: the Idle Artwork alone, no text
         _marks(img, L, low_battery, offline, charged)
         return dither(img, L.greys)
@@ -203,12 +226,12 @@ def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, 
     d.rectangle([L.left, top, L.width - L.right, L.height - L.bottom], fill=255)
     d.line([L.left + 40, top + 22, L.width - L.right - 40, top + 22], fill=0, width=2)
     f_name, name = fit(d, plan.title.upper(), FONT, L.safe_width - 120, 70, 40, tracking_ratio=0.18, wght=600)
-    tracked(d, L.width / 2, top + (120 if plan.up_next else 150), name, f_name, f_name.size * 0.18)
+    tracked(d, L.center_x, top + (120 if plan.up_next else 150), name, f_name, f_name.size * 0.18)
     if plan.up_next:
         n = (plan.up_next[0].day - plan.day).days
         nxt = " & ".join(e.name for e in plan.up_next)
         f_up, line = fit(d, f"then {nxt} · {n} days", FONT_ITALIC, L.safe_width - 120, 40, 28, wght=400)
-        d.text((L.width / 2, top + 195), line, font=f_up, fill=60, anchor="ms")
+        d.text((L.center_x, top + 195), line, font=f_up, fill=60, anchor="ms")
 
     block = countdown_block(plan.days_left, L)
     x, y, block = place_block(block, img, (L.left, L.top, L.width - L.right, top - 20))
@@ -220,7 +243,7 @@ def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, 
 def render_charge_me(L: Layout) -> Image.Image:
     img = Image.new("L", (L.width, L.height), 255)
     d = ImageDraw.Draw(img)
-    cx, cy = L.width // 2, L.height // 2 - 120
+    cx, cy = round(L.center_x), round(L.center_y) - 120
     d.rounded_rectangle([cx - 220, cy - 100, cx + 200, cy + 100], radius=24, outline=0, width=12)
     d.rectangle([cx + 200, cy - 40, cx + 236, cy + 40], fill=0)
     d.rectangle([cx - 190, cy - 70, cx - 150, cy + 70], fill=0)
