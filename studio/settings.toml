@@ -13,12 +13,21 @@ greys = 16
 # by the mat. Measured 2026-11-10 from photos of calibration charts: the mat
 # sits unevenly (the screen is low and a little right in the opening), and the
 # tablet shifts up to ~15 px between mountings, so each side is the most the
-# mat was seen to hide plus ~20 px. Artwork bleeds a further 40 px under it.
+# mat was seen to hide plus ~20 px. Artwork runs further under it (art_bleed).
 [mat_margin]
 top = 205
 bottom = 35
 left = 115
 right = 85
+
+# How far the Artwork runs under the mat past each Mat Margin, in pixels, so a
+# tablet that sits or sags a little off shows more Artwork, not a white strip.
+# Once hanging, the tablet sags down in the frame, so the top and sides get more.
+[art_bleed]
+top = 60
+bottom = 40
+left = 60
+right = 60
 
 [battery]
 low_percent = 20   # Low Battery Mark at or below this (reported by the Frame)

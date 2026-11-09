@@ -15,9 +15,6 @@ FONT = FONTS / "BodoniModa[opsz,wght].ttf"
 FONT_ITALIC = FONTS / "BodoniModa-Italic[opsz,wght].ttf"
 
 
-ART_BLEED = 40  # px of Artwork under the mat on each side
-
-
 @dataclass(frozen=True)
 class Layout:
     width: int = 1404
@@ -28,11 +25,18 @@ class Layout:
     left: int = 140
     right: int = 140
     banner_height: int = 250
+    # How far the Artwork runs under the mat past each margin, so a tablet that
+    # sits or sags a little off shows more Artwork, not a white strip.
+    bleed_top: int = 40
+    bleed_bottom: int = 40
+    bleed_left: int = 40
+    bleed_right: int = 40
 
     @classmethod
     def from_settings(cls, s: dict) -> "Layout":
         return cls(width=s["frame"]["width"], height=s["frame"]["height"], greys=s["frame"]["greys"],
-                   **s["mat_margin"])
+                   **s["mat_margin"],
+                   **{f"bleed_{k}": v for k, v in s.get("art_bleed", {}).items()})
 
     @property
     def safe_width(self) -> int:
@@ -213,8 +217,9 @@ def render_plate(plan: DayPlan, art: Image.Image, L: Layout, low_battery=False, 
     # in the mat however unevenly the mat sits on the screen, and bleeds a little
     # under the mat so a tablet mounted slightly off shows more Artwork, not a
     # white strip.
-    x0, y0 = max(0, L.left - ART_BLEED), max(0, L.top - ART_BLEED)
-    x1, y1 = min(L.width, L.width - L.right + ART_BLEED), min(L.height, L.height - L.bottom + ART_BLEED)
+    x0, y0 = max(0, L.left - L.bleed_left), max(0, L.top - L.bleed_top)
+    x1 = min(L.width, L.width - L.right + L.bleed_right)
+    y1 = min(L.height, L.height - L.bottom + L.bleed_bottom)
     img = Image.new("L", (L.width, L.height), 255)
     img.paste(whiten_paper(cover(art, x1 - x0, y1 - y0).convert("L")), (x0, y0))
     if plan.idle:  # Idle: the Idle Artwork alone, no text
