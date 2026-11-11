@@ -6,7 +6,9 @@ name: Studio
 
 on:
   schedule:
-    - cron: "0 11 * * *"  # 22:00 AEDT / 21:00 AEST
+    # The Worker starts the nightly render at 21:00 AEDT. This GitHub schedule often
+    # runs hours late, so it is only a backup.
+    - cron: "0 11 * * *"
   workflow_dispatch:
 
 concurrency:

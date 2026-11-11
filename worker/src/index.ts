@@ -78,6 +78,10 @@ async function startRender(env: Env): Promise<"started" | "recent" | "failed"> {
 }
 
 export default {
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    if ((await startRender(env)) === "failed") throw new Error("nightly render dispatch failed");
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method !== "GET") return notFound();
     const url = new URL(request.url);

@@ -54,7 +54,7 @@ Artwork is generated once per Event and reused every year after that. Changing t
 | [`studio/`](studio) | The Studio: Python that reads the calendar, makes Artwork and renders Plates. Settings are in [`settings.toml`](studio/settings.toml). |
 | [`worker/`](worker) | The Cloudflare Worker in front of the R2 bucket. It serves Plates to the Frame, records its battery level and Wi-Fi address, and serves the **Preview** page. |
 | [`frame/`](frame) | The Frame side: a BusyBox shell script plus systemd units for the tablet, and `install.sh` to copy them over SSH. |
-| [`.github/workflows/studio.yml`](.github/workflows/studio.yml) | The nightly render (22:00 Melbourne time, or 21:00 in winter), which can also be run by hand. |
+| [`.github/workflows/studio.yml`](.github/workflows/studio.yml) | The render. The Worker starts it nightly at 21:00 Melbourne time (20:00 in winter), because GitHub's own schedule runs hours late; that schedule stays as a backup. It can also be run by hand. |
 | [`scripts/setup-studio.sh`](scripts/setup-studio.sh) | A step-by-step wizard that sets up every account and secret. |
 | [`docs/adr/`](docs/adr) | Architecture decisions. |
 | [`prototypes/`](prototypes) | Early experiments with Plate layout. |

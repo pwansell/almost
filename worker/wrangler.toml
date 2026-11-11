@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
+# Starts the nightly render. GitHub's own schedule runs hours late, after the
+# Frame's 00:05 fetch; Cloudflare's cron is on time. 10:00 UTC is 21:00 AEDT / 20:00 AEST.
+[triggers]
+crons = ["0 10 * * *"]
+
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "almost"
