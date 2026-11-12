@@ -23,6 +23,9 @@
 #
 # The Studio's address lives in $HOME_DIR/frame.conf as
 #   STUDIO_URL=https://<worker>/frame/<FRAME_TOKEN>
+# and, optionally,
+#   WIFI_BAND=5   join only 5 GHz radios (some routers' 2.4 GHz side fails the
+#                 Frame's WPA handshake every time, and it never moves on)
 #
 # Test mode: put a number of seconds in $HOME_DIR/test-interval and the Frame
 # wakes that often, rotating through every Plate, instead of nightly at 00:05.
@@ -44,6 +47,7 @@ CHARGE_CHECK=1800   # seconds between battery checks while charging
 BATTERY=/sys/class/power_supply/max77818_battery
 CHARGER=/sys/class/power_supply/max77818-charger
 STUDIO_URL=""
+WIFI_BAND=""
 [ -f "$HOME_DIR/frame.conf" ] && . "$HOME_DIR/frame.conf"
 
 mkdir -p "$STATE"
@@ -85,6 +89,7 @@ fetch() {
     # Wi-Fi can take minutes to come back after waking: the first joins often
     # fail, and each failure makes wpa_supplicant back off for longer. Wait up
     # to 5 minutes, and every minute tell it to skip the backoff and try again.
+    [ "$WIFI_BAND" = 5 ] && wifi_freqs "$FREQS_5GHZ"
     tries=0
     until ip=$(wifi_ip) && download "$STUDIO_URL/manifest.txt?battery=$battery&ip=$ip" "$list.tmp"; do
         tries=$((tries + 1))
@@ -94,6 +99,10 @@ fetch() {
             wpa_cli -i wlan0 enable_network all >/dev/null 2>&1
             wpa_cli -i wlan0 reassociate >/dev/null 2>&1
             log "fetch: no Wi-Fi yet; asked it to try again"
+        fi
+        if [ $tries = 18 ] && [ "$WIFI_BAND" = 5 ] && [ -z "$(wifi_ip)" ]; then
+            wifi_freqs ""  # no 5 GHz after 3 minutes: let it try any band
+            log "fetch: no 5 GHz Wi-Fi; trying any band"
         fi
         if [ $tries -ge 30 ]; then
             log "fetch failed: Studio unreachable after 5 minutes"
@@ -253,6 +262,18 @@ show() {  # show [nofetch]
     restart_notes_app
     sleep 20
     press_power
+}
+
+FREQS_5GHZ="5180 5200 5220 5240 5260 5280 5300 5320 5500 5520 5540 5560 5580 5600 5620 5640 5660 5680 5700 5720 5745 5765 5785 5805 5825"
+
+wifi_freqs() {  # limit every saved network to these frequencies ("" = any)
+    command -v wpa_cli >/dev/null || return 0
+    for id in $(wpa_cli -i wlan0 list_networks | awk 'NR > 1 {print $1}'); do
+        wpa_cli -i wlan0 set_network "$id" freq_list "$1" >/dev/null 2>&1
+    done
+    # Leave the current link alone if it's already on an allowed band.
+    [ -z "$(wifi_ip)" ] && wpa_cli -i wlan0 reassociate >/dev/null 2>&1
+    return 0
 }
 
 wifi_ip() {  # the tablet's Wi-Fi address, so we can SSH in when it's mounted
