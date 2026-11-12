@@ -280,8 +280,13 @@ step "Token name: 'almost-preview'. Expiration: the longest you're comfortable w
 step "Repository access: 'Only select repositories' → $REPO."
 step "Permissions → Repository permissions → Actions: 'Read and write'. Nothing else."
 step "Generate the token and copy it."
-note "When it expires, the Preview stops starting renders; the nightly render keeps working."
+note "The Worker uses it to start the nightly render too. When it expires, renders fall back to GitHub's own schedule, which runs hours late: re-run this stage and the next."
 ask_secret GITHUB_DISPATCH_TOKEN "Paste the token:"
+until [[ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GITHUB_DISPATCH_TOKEN" \
+        "https://api.github.com/repos/$REPO/actions/workflows/studio.yml")" == 200 ]]; do
+  note "GitHub didn't accept that token for $REPO (a double paste is easy to miss). Try again."
+  ask_secret GITHUB_DISPATCH_TOKEN "Paste the token:"
+done
 write_env GITHUB_DISPATCH_TOKEN "$GITHUB_DISPATCH_TOKEN"
 pause
 
