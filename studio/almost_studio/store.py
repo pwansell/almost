@@ -8,6 +8,7 @@ Layout (same in both):
   plates/charge-me.png     the Charge Me Plate
   plates/manifest.json     what the Frame should hold
   state/battery.json       last battery level reported by the Frame (written by the Worker)
+  state/battery-history.json  every battery level reported, oldest first (written by the Worker)
   state/generations.json   Artwork generations per month, for the cap
 """
 

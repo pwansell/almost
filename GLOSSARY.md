@@ -46,6 +46,10 @@ _Avoid_: blank, empty, none
 A small battery symbol in a corner of the Frame, shown only when the battery needs charging soon.
 _Avoid_: battery warning, battery indicator
 
+**Battery History**:
+Every battery level the Frame reports at check-in, with its time and whether it was charging. Used to measure how long a full charge lasts.
+_Avoid_: battery log
+
 **Offline Mark**:
 A small symbol shown when the Frame has not managed to read the Event Calendar for 7 days or more, which means the Countdown may not reflect recent calendar changes.
 _Avoid_: no wifi icon, sync warning

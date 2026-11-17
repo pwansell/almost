@@ -83,7 +83,7 @@ You need: a reMarkable 2 with SSH access, a Google account, a Cloudflare account
    Values are saved to `.env`, which is git-ignored, and to GitHub Actions secrets. The wizard can be re-run safely.
 3. **Optional: Idle Artwork.** Upload an image with no text to `idle/idle.png` in the bucket. The Frame shows it when there are no upcoming Events.
 
-If the Frame's nightly fetch fails with "no Wi-Fi yet" while the router's 2.4 GHz band is in range, add `WIFI_BAND=5` to `frame/frame.conf` and reinstall. Some routers' 2.4 GHz side fails the tablet's WPA handshake every time, and the tablet keeps retrying it rather than moving to 5 GHz. With this set, the Frame joins only 5 GHz, and falls back to any band if there's no 5 GHz after 3 minutes.
+If the Frame's nightly fetch fails with "no Wi-Fi yet", check the system journal on the tablet (`journalctl | grep wpa_supplicant`) for repeated "4-Way Handshake failed" on one BSSID. Some routers' 2.4 GHz radio fails the tablet's handshake every time, and the Wi-Fi chip keeps choosing it because it has the strongest signal. Pin a radio that works by adding `WIFI_BSSID=<its BSSID>` to `frame/frame.conf` (`wpa_cli -i wlan0 scan_results` lists them), then reinstall. The Frame pins it on every wake, and if that radio can't be reached for 3 minutes during a fetch, it tries any radio.
 
 To reinstall the Frame side later: `frame/install.sh [host]`. The host defaults to `10.11.99.1`, the tablet's address over USB.
 

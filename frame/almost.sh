@@ -24,8 +24,10 @@
 # The Studio's address lives in $HOME_DIR/frame.conf as
 #   STUDIO_URL=https://<worker>/frame/<FRAME_TOKEN>
 # and, optionally,
-#   WIFI_BAND=5   join only 5 GHz radios (some routers' 2.4 GHz side fails the
-#                 Frame's WPA handshake every time, and it never moves on)
+#   WIFI_BSSID=aa:bb:cc:dd:ee:ff   join only this access point radio. Some
+#                 routers' 2.4 GHz side fails the tablet's WPA handshake every
+#                 time, and the Wi-Fi chip keeps picking it because it's the
+#                 strongest; pinning the 5 GHz radio's BSSID stops that.
 #
 # Test mode: put a number of seconds in $HOME_DIR/test-interval and the Frame
 # wakes that often, rotating through every Plate, instead of nightly at 00:05.
@@ -47,7 +49,7 @@ CHARGE_CHECK=1800   # seconds between battery checks while charging
 BATTERY=/sys/class/power_supply/max77818_battery
 CHARGER=/sys/class/power_supply/max77818-charger
 STUDIO_URL=""
-WIFI_BAND=""
+WIFI_BSSID=""
 [ -f "$HOME_DIR/frame.conf" ] && . "$HOME_DIR/frame.conf"
 
 mkdir -p "$STATE"
@@ -85,13 +87,14 @@ fetch() {
     [ -n "$STUDIO_URL" ] || { log "no STUDIO_URL; skipping fetch"; return 0; }
     mkdir -p "$PLATES"
     battery=$(cat /sys/class/power_supply/max77818_battery/capacity)
+    charging=0; on_charger && charging=1
     list=$STATE/manifest.txt
     # Wi-Fi can take minutes to come back after waking: the first joins often
     # fail, and each failure makes wpa_supplicant back off for longer. Wait up
     # to 5 minutes, and every minute tell it to skip the backoff and try again.
-    [ "$WIFI_BAND" = 5 ] && wifi_freqs "$FREQS_5GHZ"
+    wifi_pin "$WIFI_BSSID"
     tries=0
-    until ip=$(wifi_ip) && download "$STUDIO_URL/manifest.txt?battery=$battery&ip=$ip" "$list.tmp"; do
+    until ip=$(wifi_ip) && download "$STUDIO_URL/manifest.txt?battery=$battery&charging=$charging&ip=$ip" "$list.tmp"; do
         tries=$((tries + 1))
         if [ $((tries % 6)) = 0 ] && [ -z "$(wifi_ip)" ] && command -v wpa_cli >/dev/null; then
             wpa_cli -i wlan0 bssid_ignore clear >/dev/null 2>&1 ||
@@ -100,9 +103,9 @@ fetch() {
             wpa_cli -i wlan0 reassociate >/dev/null 2>&1
             log "fetch: no Wi-Fi yet; asked it to try again"
         fi
-        if [ $tries = 18 ] && [ "$WIFI_BAND" = 5 ] && [ -z "$(wifi_ip)" ]; then
-            wifi_freqs ""  # no 5 GHz after 3 minutes: let it try any band
-            log "fetch: no 5 GHz Wi-Fi; trying any band"
+        if [ $tries = 18 ] && [ -n "$WIFI_BSSID" ] && [ -z "$(wifi_ip)" ]; then
+            wifi_pin any  # pinned radio missing after 3 minutes: try any
+            log "fetch: pinned Wi-Fi radio not reachable; trying any"
         fi
         if [ $tries -ge 30 ]; then
             log "fetch failed: Studio unreachable after 5 minutes"
@@ -264,14 +267,12 @@ show() {  # show [nofetch]
     press_power
 }
 
-FREQS_5GHZ="5180 5200 5220 5240 5260 5280 5300 5320 5500 5520 5540 5560 5580 5600 5620 5640 5660 5680 5700 5720 5745 5765 5785 5805 5825"
-
-wifi_freqs() {  # limit every saved network to these frequencies ("" = any)
-    command -v wpa_cli >/dev/null || return 0
+wifi_pin() {  # join only this BSSID ("" = leave as is, "any" = unpin)
+    [ -n "$1" ] && command -v wpa_cli >/dev/null || return 0
     for id in $(wpa_cli -i wlan0 list_networks | awk 'NR > 1 {print $1}'); do
-        wpa_cli -i wlan0 set_network "$id" freq_list "$1" >/dev/null 2>&1
+        wpa_cli -i wlan0 set_network "$id" bssid "$1" >/dev/null 2>&1
     done
-    # Leave the current link alone if it's already on an allowed band.
+    # Leave a working link alone; otherwise join again on the new terms.
     [ -z "$(wifi_ip)" ] && wpa_cli -i wlan0 reassociate >/dev/null 2>&1
     return 0
 }
@@ -319,6 +320,7 @@ resleep() {
 }
 
 wake() {
+    wifi_pin "$WIFI_BSSID"  # on every wake, so SSH over Wi-Fi works too
     alarm=$(cat "$STATE/alarm" 2>/dev/null || echo 0)
     now=$(date +%s)
     if [ "$now" -ge $((alarm - 5)) ]; then

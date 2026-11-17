@@ -1,6 +1,6 @@
 // Almost: the Worker in front of the Studio's R2 bucket.
 //
-//   GET /frame/<FRAME_TOKEN>/manifest.txt?battery=NN&ip=A.B.C.D  Frame's nightly check-in (or .json)
+//   GET /frame/<FRAME_TOKEN>/manifest.txt?battery=NN&charging=0|1&ip=A.B.C.D  Frame's nightly check-in (or .json)
 //   GET /frame/<FRAME_TOKEN>/<YYYY-MM-DD|charge-me>.png  a Plate
 //   GET /preview/<PREVIEW_TOKEN>                         the Preview page (starts a render)
 //   GET /preview/<PREVIEW_TOKEN>/manifest.json           for the page to poll
@@ -37,12 +37,23 @@ async function object(env: Env, key: string, type: string): Promise<Response> {
   });
 }
 
-async function recordBattery(env: Env, raw: string | null): Promise<void> {
+// Every reading is kept in the Battery History, so a full charge's life can be
+// measured; 1500 readings is about four years of nightly check-ins.
+const BATTERY_HISTORY_MAX = 1500;
+
+type BatteryReading = { at: string; percent: number; charging?: boolean };
+
+async function recordBattery(env: Env, raw: string | null, chargingRaw: string | null): Promise<void> {
   const percent = Number(raw);
   if (raw === null || !Number.isInteger(percent) || percent < 0 || percent > 100) return;
-  await env.BUCKET.put("state/battery.json", JSON.stringify({ percent, at: new Date().toISOString() }), {
-    httpMetadata: { contentType: "application/json" },
-  });
+  const reading: BatteryReading = { at: new Date().toISOString(), percent };
+  if (chargingRaw === "0" || chargingRaw === "1") reading.charging = chargingRaw === "1";
+  const json = { httpMetadata: { contentType: "application/json" } };
+  await env.BUCKET.put("state/battery.json", JSON.stringify(reading), json);
+  const old = await env.BUCKET.get("state/battery-history.json");
+  const history = old ? ((await old.json()) as BatteryReading[]) : [];
+  history.push(reading);
+  await env.BUCKET.put("state/battery-history.json", JSON.stringify(history.slice(-BATTERY_HISTORY_MAX)), json);
 }
 
 // The Frame's Wi-Fi address, so it can be reached over SSH once mounted.
@@ -90,7 +101,7 @@ export default {
 
     if (area === "frame" && sameToken(token ?? "", env.FRAME_TOKEN)) {
       if (file === "manifest.json" || file === "manifest.txt") {
-        await recordBattery(env, url.searchParams.get("battery"));
+        await recordBattery(env, url.searchParams.get("battery"), url.searchParams.get("charging"));
         await recordAddress(env, url.searchParams.get("ip"));
         return object(env, `plates/${file}`, file.endsWith(".txt") ? "text/plain" : "application/json");
       }
